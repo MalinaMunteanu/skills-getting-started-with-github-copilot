@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      // Clear & reset activity select to avoid duplicated options
+      activitySelect.innerHTML = '<option value="">Choose an activity</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -25,7 +27,56 @@ document.addEventListener("DOMContentLoaded", () => {
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants-section">
+            <strong>Participants (${details.participants.length}/${details.max_participants}):</strong>
+            <div class="participants-container"></div>
+          </div>
         `;
+
+        // Populate participants as DOM nodes so we can attach delete handlers
+        const participantsContainer = activityCard.querySelector('.participants-container');
+        if (details.participants.length === 0) {
+          participantsContainer.innerHTML = "<p class='no-participants'>No participants yet</p>";
+        } else {
+          const ul = document.createElement('ul');
+          ul.className = 'participants-list';
+          details.participants.forEach(p => {
+            const li = document.createElement('li');
+            li.textContent = p + ' ';
+
+            const del = document.createElement('span');
+            del.className = 'delete-icon';
+            del.textContent = '🗑️';
+            del.dataset.email = p;
+            del.style.cursor = 'pointer';
+            del.addEventListener('click', async () => {
+              try {
+                const res = await fetch(`/activities/${encodeURIComponent(name)}/remove?email=${encodeURIComponent(p)}`, { method: 'POST' });
+                const body = await res.json();
+                if (res.ok) {
+                  messageDiv.textContent = body.message;
+                  messageDiv.className = 'success';
+                  messageDiv.classList.remove('hidden');
+                  setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+                  await fetchActivities();
+                } else {
+                  messageDiv.textContent = body.detail || 'Failed to remove participant';
+                  messageDiv.className = 'error';
+                  messageDiv.classList.remove('hidden');
+                }
+              } catch (err) {
+                console.error('Error removing participant:', err);
+                messageDiv.textContent = 'Failed to remove participant';
+                messageDiv.className = 'error';
+                messageDiv.classList.remove('hidden');
+              }
+            });
+
+            li.appendChild(del);
+            ul.appendChild(li);
+          });
+          participantsContainer.appendChild(ul);
+        }
 
         activitiesList.appendChild(activityCard);
 
@@ -62,6 +113,8 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh activities list so the new participant appears without a page reload
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
